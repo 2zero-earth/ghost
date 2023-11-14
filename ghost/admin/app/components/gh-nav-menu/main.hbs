@@ -23,11 +23,6 @@
                     </li>
                     {{/if}}
                     <li class="relative">
-                        <span {{action "transitionToOrRefreshSite" on="click"}}>
-                            <LinkTo @route="site" data-test-nav="site" @current-when={{this.isOnSite}} @preventDefault={{false}}>
-                                {{svg-jar "view-site"}} View site
-                            </LinkTo>
-                        </span>
                         <a href="{{this.config.blogUrl}}/" class="gh-secondary-action" title="Open site in new tab" target="_blank" rel="noopener noreferrer">
                             <span>{{svg-jar "external"}}</span>
                         </a>
@@ -150,8 +145,6 @@
                 {{/if}}
             </div>
         {{/unless}}
-
         <GhNavMenu::Footer />
-
     </section>
 </div>
