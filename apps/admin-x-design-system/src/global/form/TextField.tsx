@@ -76,7 +76,7 @@ const TextField: React.FC<TextFieldProps> = ({
 
     const textFieldClasses = !unstyled && clsx(
         'peer z-[1] order-2 h-8 w-full bg-transparent px-3 py-1 text-sm placeholder:text-grey-500 dark:placeholder:text-grey-700 md:h-9 md:py-2 md:text-md',
-        disabled ? 'cursor-not-allowed text-grey-700 opacity-60 dark:text-grey-700' : 'dark:text-white',
+        disabled ? 'text-grey-700 opacity-60 dark:text-grey-700' : 'dark:text-white',
         rightPlaceholder ? 'w-0 grow rounded-l-md' : 'rounded-md',
         className
     );
@@ -126,7 +126,7 @@ const TextField: React.FC<TextFieldProps> = ({
         return (
             <div className={containerClassName}>
                 {field}
-                {title && <Heading className={hideTitle ? 'sr-only' : 'order-1 peer-focus:!text-black dark:!text-grey-300 dark:peer-focus:!text-white'} htmlFor={id} useLabelTag={true}>{title}</Heading>}
+                {title && <Heading className={hideTitle ? 'sr-only' : 'order-1'} htmlFor={id} useLabelTag={true}>{title}</Heading>}
                 {hint && <Hint className={hintClassName} color={error ? 'red' : 'default'}>{hint}</Hint>}
             </div>
         );
