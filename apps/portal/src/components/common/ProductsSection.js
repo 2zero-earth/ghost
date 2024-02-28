@@ -51,7 +51,6 @@ export const ProductsSectionStyles = () => {
             height: 100% !important;
             width: 50%;
             border-radius: 999px;
-            color: var(--grey7);
             background: transparent;
             font-size: 1.5rem;
         }
@@ -80,13 +79,8 @@ export const ProductsSectionStyles = () => {
         }
 
         .gh-portal-maximum-discount {
-            font-size: 1.4rem;
             font-weight: 400;
             margin-left: 4px;
-            margin-bottom: -1px;
-        }
-
-        .gh-portal-btn.active .gh-portal-maximum-discount {
             opacity: 0.5;
         }
 
@@ -895,7 +889,7 @@ function ProductPriceSwitch({selectedInterval, setSelectedInterval, products}) {
                     }}
                 >
                     {t('Yearly')}
-                    {(highestYearlyDiscount > 0) && <span className='gh-portal-maximum-discount'>{t('(Save {{highestYearlyDiscount}}%)', {highestYearlyDiscount})}</span>}
+                    {(highestYearlyDiscount > 0) && <span className='gh-portal-maximum-discount'>{t('(save {{highestYearlyDiscount}}%)', {highestYearlyDiscount})}</span>}
                 </button>
             </div>
         </div>

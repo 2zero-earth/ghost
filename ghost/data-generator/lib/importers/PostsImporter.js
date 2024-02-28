@@ -51,11 +51,11 @@ class PostsImporter extends TableImporter {
         const visibility = luck(85) ? 'paid' : luck(10) ? 'members' : 'public';
 
         return {
-            id: faker.database.mongodbObjectId(),
+            id: this.fastFakeObjectId(),
             created_at: dateToDatabaseString(timestamp),
             created_by: '1',
             updated_at: dateToDatabaseString(timestamp),
-            published_at: status === 'published' ? dateToDatabaseString(faker.date.soon(5, timestamp)) : null,
+            published_at: status === 'published' || status === 'scheduled' ? dateToDatabaseString(faker.date.soon(5, timestamp)) : null,
             uuid: faker.datatype.uuid(),
             title: title,
             type: this.type,

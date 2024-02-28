@@ -7,12 +7,12 @@ const {faker} = require('@faker-js/faker');
 const {faker: americanFaker} = require('@faker-js/faker/locale/en_US');
 const crypto = require('crypto');
 const {Buffer} = require('node:buffer');
-
+const DatabaseInfo = require('@tryghost/database-info');
+const errors = require('@tryghost/errors');
 const importers = require('./importers').reduce((acc, val) => {
     acc[val.table] = val;
     return acc;
 }, {});
-const schema = require('../../core/core/server/data/schema').tables;
 
 class DataGenerator {
     /**
@@ -24,6 +24,7 @@ class DataGenerator {
     constructor({
         knex,
         tables,
+        schemaTables,
         clearDatabase = false,
         baseDataPack = '',
         baseUrl,
@@ -31,10 +32,12 @@ class DataGenerator {
         printDependencies,
         withDefault,
         seed,
-        quantities = {}
+        quantities = {},
+        useTransaction = true
     }) {
         this.knex = knex;
         this.tableList = tables || [];
+        this.schemaTables = schemaTables;
         this.willClearData = clearDatabase;
         this.useBaseDataPack = baseDataPack !== '';
         this.baseDataPack = baseDataPack;
@@ -44,17 +47,20 @@ class DataGenerator {
         this.printDependencies = printDependencies;
         this.seed = seed;
         this.quantities = quantities;
+        this.useTransaction = useTransaction;
     }
 
     sortTableList() {
         // Add missing dependencies
         for (const table of this.tableList) {
             table.importer = importers[table.name];
+
             // eslint-disable-next-line no-unused-vars
-            table.dependencies = Object.entries(schema[table.name]).reduce((acc, [_col, data]) => {
+            table.dependencies = Object.entries(this.schemaTables[table.name]).reduce((acc, [_col, data]) => {
                 if (data.references) {
                     const referencedTable = data.references.split('.')[0];
-                    if (!acc.includes(referencedTable)) {
+                    // The ghost_subscriptions_id property has a foreign key to the subscriptions table, but we don't use that table yet atm, so don't add it as a dependency
+                    if (!acc.includes(referencedTable) && referencedTable !== 'subscriptions') {
                         acc.push(referencedTable);
                     }
                 }
@@ -95,7 +101,7 @@ class DataGenerator {
                 // Avoid deleting the admin user
                 await transaction(table).del().whereNot('id', '1');
             } else {
-                await transaction(table).del();
+                await transaction(table).truncate();
             }
         }
     }
@@ -149,13 +155,13 @@ class DataGenerator {
     }
 
     async importData() {
-        const transaction = await this.knex.transaction();
+        const start = Date.now();
 
         // Add default tables if none are specified
         if (this.tableList.length === 0) {
             this.tableList = Object.keys(importers).map(name => ({name}));
         } else if (this.withDefault) {
-            // Add default tables to the end of the list
+        // Add default tables to the end of the list
             const defaultTables = Object.keys(importers).map(name => ({name}));
             for (const table of defaultTables) {
                 if (!this.tableList.find(t => t.name === table.name)) {
@@ -167,8 +173,7 @@ class DataGenerator {
         // Error if we have an unknown table
         for (const table of this.tableList) {
             if (importers[table.name] === undefined) {
-                // eslint-disable-next-line
-                throw new Error(`Unknown table: ${table.name}`);
+                throw new errors.IncorrectUsageError({message: `Unknown table: ${table.name}`});
             }
         }
 
@@ -180,6 +185,29 @@ class DataGenerator {
                 this.logger.info(`\t${table.name}: ${table.dependencies.join(', ')}`);
             }
             process.exit(0);
+        }
+
+        if (this.useTransaction) {
+            await this.knex.transaction(async (transaction) => {
+                if (!DatabaseInfo.isSQLite(this.knex)) {
+                    await transaction.raw('SET autocommit=0;');
+                }
+
+                await this.#run(transaction);
+            }, {isolationLevel: 'read committed'});
+        } else {
+            await this.#run(this.knex);
+        }
+
+        this.logger.info(`Completed data import in ${((Date.now() - start) / 1000).toFixed(1)}s`);
+    }
+
+    async #run(transaction) {
+        if (!DatabaseInfo.isSQLite(this.knex)) {
+            await transaction.raw('ALTER INSTANCE DISABLE INNODB REDO_LOG;');
+            await transaction.raw('SET FOREIGN_KEY_CHECKS=0;');
+            await transaction.raw('SET unique_checks=0;');
+            await transaction.raw('SET GLOBAL local_infile=1;');
         }
 
         if (this.willClearData) {
@@ -243,7 +271,12 @@ class DataGenerator {
             await tableImporter.finalise();
         }
 
-        await transaction.commit();
+        // Re-enable the redo log because it's a persisted global
+        // Leaving it disabled can break the database in the event of an unexpected shutdown
+        // See https://dev.mysql.com/doc/refman/8.0/en/innodb-redo-log.html#innodb-disable-redo-logging
+        if (!DatabaseInfo.isSQLite(this.knex)) {
+            await transaction.raw('ALTER INSTANCE ENABLE INNODB REDO_LOG;');
+        }
     }
 }
 

@@ -1,6 +1,6 @@
-import NiceModal, {useModal} from '@ebay/nice-modal-react';
+import NiceModal from '@ebay/nice-modal-react';
 import PortalFrame from '../../membership/portal/PortalFrame';
-import useFeatureFlag from '../../../../hooks/useFeatureFlag';
+// import useFeatureFlag from '../../../../hooks/useFeatureFlag';
 import {Button, ConfirmationModal, Form, PreviewModalContent, TextArea, TextField, showToast} from '@tryghost/admin-x-design-system';
 import {ErrorMessages, useForm, useHandleError} from '@tryghost/admin-x-framework/hooks';
 import {Offer, useBrowseOffersById, useEditOffer} from '@tryghost/admin-x-framework/api/offers';
@@ -34,6 +34,8 @@ const Sidebar: React.FC<{
             const [nameLength, setNameLength] = useState(offer?.name.length || 0);
             const nameLengthColor = nameLength > 40 ? 'text-red' : 'text-green';
 
+            const {updateRoute} = useRouting();
+
             useEffect(() => {
                 if (offer?.name) {
                     setNameLength(offer?.name.length);
@@ -66,6 +68,7 @@ const Sidebar: React.FC<{
                                     type: 'success',
                                     message: 'Offer archived successfully'
                                 });
+                                updateRoute('offers/edit');
                             } catch (e) {
                                 handleError(e);
                             }
@@ -86,6 +89,7 @@ const Sidebar: React.FC<{
                                     type: 'success',
                                     message: 'Offer reactivated successfully'
                                 });
+                                updateRoute('offers/edit');
                             } catch (e) {
                                 handleError(e);
                             }
@@ -173,20 +177,11 @@ const Sidebar: React.FC<{
 
 const EditOfferModal: React.FC<{id: string}> = ({id}) => {
     const {siteData} = useGlobalData();
-    const modal = useModal();
     const {updateRoute} = useRouting();
     const handleError = useHandleError();
-    const hasOffers = useFeatureFlag('adminXOffers');
     const {mutateAsync: editOffer} = useEditOffer();
 
     const [href, setHref] = useState<string>('');
-
-    useEffect(() => {
-        if (!hasOffers) {
-            modal.remove();
-            updateRoute('');
-        }
-    }, [hasOffers, modal, updateRoute]);
 
     const {data: {offers: offerById = []} = {}} = useBrowseOffersById(id ? id : '');
 
@@ -201,7 +196,7 @@ const EditOfferModal: React.FC<{id: string}> = ({id}) => {
             const newErrors: Record<string, string> = {};
 
             if (!formState?.name) {
-                newErrors.name = 'Please enter a name';
+                newErrors.name = 'Name is required';
             }
 
             if (!formState?.display_title) {
@@ -253,7 +248,8 @@ const EditOfferModal: React.FC<{id: string}> = ({id}) => {
     }, [formState, siteData]);
 
     const iframe = <PortalFrame
-        href={href}
+        href={href || ''}
+        portalParent='offers'
     />;
 
     return offerById ? <PreviewModalContent

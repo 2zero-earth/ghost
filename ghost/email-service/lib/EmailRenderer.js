@@ -167,8 +167,9 @@ class EmailRenderer {
         this.#models = models;
     }
 
-    getSubject(post) {
-        return post.related('posts_meta')?.get('email_subject') || post.get('title');
+    getSubject(post, isTestEmail = false) {
+        const subject = post.related('posts_meta')?.get('email_subject') || post.get('title');
+        return isTestEmail ? `[TEST] ${subject}` : subject;
     }
 
     #getRawFromAddress(post, newsletter) {
@@ -211,22 +212,19 @@ class EmailRenderer {
      * @returns {string|null}
      */
     getReplyToAddress(post, newsletter) {
-        if (newsletter.get('sender_reply_to') === 'support') {
+        const replyToAddress = newsletter.get('sender_reply_to');
+
+        if (replyToAddress === 'support') {
             return this.#settingsHelpers.getMembersSupportAddress();
         }
-        if (newsletter.get('sender_reply_to') === 'newsletter') {
-            if (this.#emailAddressService.managedEmailEnabled) {
-                // Don't duplicate the same replyTo addres if it already in the FROM address
-                return null;
-            }
+
+        if (replyToAddress === 'newsletter' && !this.#emailAddressService.managedEmailEnabled) {
             return this.getFromAddress(post, newsletter);
         }
 
         const addresses = this.#emailAddressService.getAddress({
             from: this.#getRawFromAddress(post, newsletter),
-            replyTo: {
-                address: newsletter.get('sender_reply_to')
-            }
+            replyTo: replyToAddress === 'newsletter' ? undefined : {address: replyToAddress}
         });
 
         if (addresses.replyTo) {

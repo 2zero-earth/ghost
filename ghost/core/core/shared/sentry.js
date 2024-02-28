@@ -4,15 +4,6 @@ const SentryKnexTracingIntegration = require('./SentryKnexTracingIntegration');
 const sentryConfig = config.get('sentry');
 const errors = require('@tryghost/errors');
 
-// Import Sentry's profiling integration if available
-let ProfilingIntegration;
-try {
-    ({ProfilingIntegration} = require('@sentry/profiling-node'));
-} catch (err) {
-    logging.warn('Sentry Profiling Integration not available');
-    ProfilingIntegration = null;
-}
-
 const beforeSend = function (event, hint) {
     try {
         const exception = hint.originalException;
@@ -66,28 +57,69 @@ const beforeSend = function (event, hint) {
     }
 };
 
+const ALLOWED_HTTP_TRANSACTIONS = [
+    '/ghost/api', // any Ghost API call
+    '/members/api', // any Members API call
+    '/:slug', // any frontend post/page
+    '/author', // any frontend author page
+    '/tag' // any frontend tag page
+].map((path) => {
+    // Sentry names HTTP transactions like: "<HTTP_METHOD> <PATH>" i.e. "GET /ghost/api/content/settings"
+    // Match any of the paths above with any HTTP method, and also the homepage "GET /"
+    return new RegExp(`^(GET|POST|PUT|DELETE)\\s(?<path>${path}\\/.+|\\/$)`);
+});
+
+const beforeSendTransaction = function (event) {
+    // Drop transactions that are not in the allowed list
+    for (const transaction of ALLOWED_HTTP_TRANSACTIONS) {
+        const match = event.transaction.match(transaction);
+
+        if (match?.groups?.path) {
+            return event;
+        }
+    }
+
+    return null;
+};
+
 if (sentryConfig && !sentryConfig.disabled) {
     const Sentry = require('@sentry/node');
     const version = require('@tryghost/version').full;
-    const environment = config.get('env');
+
+    let environment = config.get('PRO_ENV');
+    if (!environment) {
+        environment = config.get('env');
+    }
+
     const sentryInitConfig = {
         dsn: sentryConfig.dsn,
         release: 'ghost@' + version,
         environment: environment,
         maxValueLength: 1000,
         integrations: [],
-        beforeSend
+        beforeSend,
+        beforeSendTransaction
     };
 
     // Enable tracing if sentry.tracing.enabled is true
     if (sentryConfig.tracing?.enabled === true) {
         sentryInitConfig.integrations.push(new Sentry.Integrations.Http({tracing: true}));
-        sentryInitConfig.integrations.push(new Sentry.Integrations.Express());
         sentryInitConfig.tracesSampleRate = parseFloat(sentryConfig.tracing.sampleRate) || 0.0;
         // Enable profiling, if configured, only if tracing is also configured
-        if (ProfilingIntegration && sentryConfig.profiling?.enabled === true) {
-            sentryInitConfig.integrations.push(new ProfilingIntegration());
-            sentryInitConfig.profilesSampleRate = parseFloat(sentryConfig.profiling.sampleRate) || 0.0;
+        if (sentryConfig.profiling?.enabled === true) {
+            // Import Sentry's profiling integration if available
+            let ProfilingIntegration;
+            try {
+                ({ProfilingIntegration} = require('@sentry/profiling-node'));
+            } catch (err) {
+                logging.warn('Sentry Profiling Integration not available');
+                ProfilingIntegration = null;
+            }
+
+            if (ProfilingIntegration) {
+                sentryInitConfig.integrations.push(new ProfilingIntegration());
+                sentryInitConfig.profilesSampleRate = parseFloat(sentryConfig.profiling.sampleRate) || 0.0;
+            }
         }
     }
     Sentry.init(sentryInitConfig);
@@ -109,7 +141,9 @@ if (sentryConfig && !sentryConfig.disabled) {
         }),
         tracingHandler: Sentry.Handlers.tracingHandler(),
         captureException: Sentry.captureException,
+        captureMessage: Sentry.captureMessage,
         beforeSend: beforeSend,
+        beforeSendTransaction: beforeSendTransaction,
         initQueryTracing: (knex) => {
             if (sentryConfig.tracing?.enabled === true) {
                 const integration = new SentryKnexTracingIntegration(knex);
